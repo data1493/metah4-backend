@@ -1,34 +1,35 @@
 # Metah4 Backend - Privacy Proxy
 
-A Cloudflare Worker that proxies search requests to Brave Search API for privacy-focused querying.
+A Cloudflare Worker that decrypts frontend-encrypted queries and proxies them to Brave Search API.
 
 ## Project Status
 
-- ✅ **Worker Implemented**: TypeScript Cloudflare Worker handling GET /search endpoint
-- ✅ **Brave API Integration**: Forwards queries to https://api.search.brave.com/res/v1/web/search
+- ✅ **Worker Implemented**: TypeScript ES Module Worker handling GET /search endpoint
+- ✅ **Brave API Integration**: Forwards decrypted queries to https://api.search.brave.com/res/v1/web/search
 - ✅ **CORS Enabled**: Access-Control-Allow-Origin: '*'
-- ✅ **Error Handling**: 500 responses for missing API key or Brave failures
-- ✅ **Privacy Focused**: No logging, hashed queries from frontend
+- ✅ **Error Handling**: 400 for invalid `q`, base64, or decrypt failures; 500 for missing key/secret
+- ⚠️ **Debug Logging Enabled**: Temporary `console.log` of decrypted query is present in worker
 - ✅ **Deployed**: Live at https://metah4-backend.metah4-backend.workers.dev
 - ✅ **Secrets Configured**: BRAVE_API_KEY set via Wrangler
+- ⏳ **Pending Secret**: SHARED_SECRET must be set in Wrangler for decryption
 
 ## API Endpoint
 
 ```
-GET https://metah4-backend.metah4-backend.workers.dev/search?q=<hashed_query>
+GET https://metah4-backend.metah4-backend.workers.dev/search?q=<base64_encrypted_query>
 ```
 
 - **Method**: GET
-- **Query Param**: `q` (URL-encoded search query)
-- **Response**: JSON from Brave Search API
+- **Query Param**: `q` (base64 of `nonce + ciphertext` encrypted via libsodium secretbox)
+- **Response**: JSON from Brave Search API (pass-through)
 - **CORS**: Enabled for all origins
-- **Errors**: 404 for invalid paths, 500 for API issues
+- **Errors**: 400 (`Missing q`, `Invalid base64`, `Decryption failed`), 405 for wrong method, 500 for missing secrets
 
 ## Implementation Details
 
-- **src/index.ts**: Main worker logic
-- **Environment**: BRAVE_API_KEY secret required
-- **Headers**: X-Subscription-Token for Brave API auth
+- **src/index.ts**: ES Module `export default { fetch(...) }` handler with lazy sodium init
+- **Environment**: BRAVE_API_KEY and SHARED_SECRET secrets required
+- **Headers**: `X-Subscription-Token` for Brave API auth
 - **Limits**: count=10 results per query
 
 # Cloudflare Workers
