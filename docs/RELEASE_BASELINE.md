@@ -6,7 +6,7 @@ Freeze a known-good backend state for Metah4 encrypted search proxy. No further 
 ## Baseline Metadata
 
 - Git tag: `v0.1-stable`
-- Baseline commit: `<to-be-filled>`
+- Baseline commit: `94088b5`
 - `src/index.ts` SHA-256: `744d76fc1ba64cee1b9ff24b9f613d4b0c7ac4dd02d0cc03278432b52c269a07`
 - Worker URL: `https://metah4-backend.metah4-backend.workers.dev`
 
