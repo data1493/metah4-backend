@@ -8,10 +8,11 @@ A Cloudflare Worker that decrypts frontend-encrypted queries and proxies them to
 - ✅ **Brave API Integration**: Forwards decrypted queries to https://api.search.brave.com/res/v1/web/search
 - ✅ **CORS Enabled**: Access-Control-Allow-Origin: '*'
 - ✅ **Error Handling**: 400 for invalid `q`, base64, or decrypt failures; 500 for missing key/secret
-- ⚠️ **Debug Logging Enabled**: Temporary `console.log` of decrypted query is present in worker
+- ✅ **No Query Logging**: Decrypted query debug logging removed for privacy
 - ✅ **Deployed**: Live at https://metah4-backend.metah4-backend.workers.dev
 - ✅ **Secrets Configured**: BRAVE_API_KEY set via Wrangler
 - ⏳ **Pending Secret**: SHARED_SECRET must be set in Wrangler for decryption
+- ✅ **Worklog Added**: See `docs/WORKLOG.md` for issue history and known-good baseline
 
 ## API Endpoint
 
