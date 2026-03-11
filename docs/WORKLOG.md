@@ -41,18 +41,76 @@ Track incidents, fixes, and the current known-good worker configuration so we ca
 - Cause: base64 query payload likely altered by URL encoding (`+` handling).
 - Mitigation: frontend should send `encodeURIComponent(base64)` or use URL-safe base64.
 
-## Current Known-Good Baseline
+7. Persistent runtime hangs despite guards (March 10, 2026)
+- Symptom: Cloudflare "Worker's code had hung" error continues despite multiple timeout attempts.
+- Investigation approach:
+  - Added comprehensive numbered logging ([1] through [9]) throughout pipeline
+  - Added max input length check (10,000 chars) to prevent oversized payloads
+  - Wrapped `await sodium.ready` in 2-second timeout with Promise.race
+  - Added step-by-step logging for every crypto operation (decode, decrypt, string conversion)
+  - Added 3-second timeout on response body read via Promise.race
+  - Changed `AbortController` fetch timeout to 8 seconds (well within Worker kill limit)
+- Diagnostic strategy: Use `wrangler tail` to identify which numbered log appears last before hang
+- Log sequence:
+  - [1] Query received
+  - [2] Sodium init
+  - [3] Secret key conversion
+  - [4] Base64 decode
+  - [5] Nonce/ciphertext extraction
+  - [6] Decryption
+  - [7] String conversion
+  - [8] Brave fetch
+  - [9] Body read
+- **ROOT CAUSE FOUND**: Logs showed hang occurring at [2] during sodium initialization. The `await sodium.ready` call (even wrapped in Promise.race with timeout) was causing "Promise will never complete" error.
+- **SOLUTION ATTEMPT 1**: Removed `await sodium.ready` entirely. Version 3e1cea32 deployed.
+- **NEW ISSUE (March 11, 2026)**: Without initialization, sodium functions failed with "Cannot read properties of undefined (reading '_malloc')" - sodium wasn't ready when methods called.
+- **ROOT CAUSE ANALYSIS**: Cloudflare Workers prohibits async I/O in global scope but requires sodium to be initialized before use.
+- **CORRECT PATTERN DISCOVERED**:
+  - ❌ WRONG: `await sodium.ready` in glocf867e1d - March 11, 2026)
 
 - Worker format: ES Module (`export default` fetch handler)
 - Entrypoint: `src/index.ts` (configured in `wrangler.jsonc` as `main: "src/index.ts"`)
-- Crypto: `libsodium-wrappers` default import with lazy init and timeout guard
+- Crypto: `libsodium-wrappers` default import with **CORRECT INITIALIZATION PATTERN**:
+  - Global scope: `const sodiumReady = sodium.ready` (store promise, don't await)
+  - Handler scope: `await sodiumReady` (await inside async handler)
+  - This is the ONLY pattern that works in Cloudflare Workers runtime
+- Sodium functions used after initialization// Global scope - store promise
+  // ... inside handler:
+  await sodiumReady  // Handler scope - await stored promise
+  ```
+- Status: ✅ RESOLVED (March 11, 2026)
+
+## Current Status: NO WORKING BASELINE (March 11, 2026)
+
+**CRITICAL ISSUE**: libsodium-wrappers appears fundamentally incompatible with Cloudflare Workers
+
+- **All initialization attempts fail**:
+  - v3e1cea32: No await → "_malloc undefined"
+  - v948b9aa0: Await in handler → "Promise will never complete"
+  - v27af7f0b: Promise.race with timeout → **STILL "Promise will never complete"**
+
+- **Key Finding**: ANY await of `sodium.ready` (direct or wrapped) triggers Workers runtime error
+
+- **Architecture Decision Required**:
+  - Option 1: Switch to `@stablelib/xchacha20poly1305` (pure JS, no WASM)
+  - Option 2: Use `libsodium` (C library) via nodejs_compat with different binding
+  - Option 3: Switch to Web Crypto API (different encryption scheme)
+  - Option 4: Use Cloudflare Workers built-in WebAssembly approach differently
+
+**Previous baseline (superseded by runtime incompatibility):**
+- Worker format: ES Module (`export default` fetch handler)
+- Entrypoint: `src/index.ts`
+- Attempted crypto: libsodium-wrappers (BLOCKED)
 - Endpoint: `GET /search?q=<encrypted_base64>`
 - CORS: `Access-Control-Allow-Origin: *`, `GET, OPTIONS`
-- Upstream: Brave search API with `X-Subscription-Token`
+- Upstream: Brave search API with `X-Subscription-Token` and AbortController timeout (8s)
+- Input validation: Max query length 10,000 chars, payload length checks
+- Error handling: Comprehensive try-catch blocks with JSON error responses
+- Diagnostic logging: Numbered logs ([1]-[9]) throughout pipeline for troubleshooting
 - Required secrets:
-- `BRAVE_API_KEY`
-- `SHARED_SECRET` (32-byte hex key)
-- Logging policy: no decrypted query logs
+  - `BRAVE_API_KEY`
+  - `SHARED_SECRET` (32-byte hex key)
+- Logging policy: No decrypted query logs in production
 
 ## Quick Validation Checklist
 

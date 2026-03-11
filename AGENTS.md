@@ -13,6 +13,7 @@ A Cloudflare Worker that decrypts frontend-encrypted queries and proxies them to
 - ✅ **Secrets Configured**: BRAVE_API_KEY set via Wrangler
 - ⏳ **Pending Secret**: SHARED_SECRET must be set in Wrangler for decryption
 - ✅ **Worklog Added**: See `docs/WORKLOG.md` for issue history and known-good baseline
+- ✅ **Hang Issue RESOLVED**: Version 3e1cea32 (removed `await sodium.ready` which was causing hangs)
 
 ## API Endpoint
 
@@ -28,10 +29,15 @@ GET https://metah4-backend.metah4-backend.workers.dev/search?q=<base64_encrypted
 
 ## Implementation Details
 
-- **src/index.ts**: ES Module `export default { fetch(...) }` handler with lazy sodium init
+- **src/index.ts**: ES Module `export default { fetch(...) }` handler
+- **Crypto**: libsodium-wrappers with direct function access (no `await sodium.ready` - causes hangs in Workers)
 - **Environment**: BRAVE_API_KEY and SHARED_SECRET secrets required
 - **Headers**: `X-Subscription-Token` for Brave API auth
 - **Limits**: count=10 results per query
+- **Timeouts**: 8-second AbortController on Brave API fetch, 3-second body read timeout
+- **Validation**: Max input length 10,000 chars, comprehensive payload checks
+- **Logging**: Numbered diagnostic logs ([1]-[9]) for troubleshooting
+- **Current Version**: 3e1cea32 (stable, hang-free)
 
 # Cloudflare Workers
 
