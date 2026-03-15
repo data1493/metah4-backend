@@ -117,7 +117,6 @@ export default {
     try {
       decrypted = new TextDecoder().decode(plain)
       console.log('[7b] String conversion success, query length:', decrypted.length)
-      console.log('[7c] DECRYPTED QUERY:', decrypted)
     } catch (e) {
       console.log('[7e] decode fail:', e instanceof Error ? e.message : String(e))
       return new Response(JSON.stringify({ error: 'String conversion failed' }), { status: 400, headers: corsHeaders })
