@@ -2,17 +2,26 @@
 	"name": "metah4-backend",
 	"version": "1.0.0",
 	"private": true,
+	"type": "module",
 	"scripts": {
 		"deploy": "wrangler deploy",
 		"dev": "wrangler dev",
 		"start": "wrangler dev",
 		"test": "vitest",
+		"typecheck": "tsc --noEmit",
+		"lint": "eslint src/ test/",
+		"lint:fix": "eslint src/ test/ --fix",
 		"cf-typegen": "wrangler types"
 	},
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "^0.12.4",
+		"@eslint/js": "^10.0.1",
 		"@types/node": "^25.3.5",
+		"@typescript-eslint/eslint-plugin": "^8.57.0",
+		"@typescript-eslint/parser": "^8.57.0",
+		"eslint": "^10.0.3",
 		"typescript": "^5.5.2",
+		"typescript-eslint": "^8.57.0",
 		"vitest": "~3.2.0",
 		"wrangler": "^4.71.0"
 	},
