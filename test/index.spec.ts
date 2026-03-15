@@ -36,7 +36,7 @@ function makeEnv(overrides: Record<string, string> = {}): typeof env {
   } as typeof env
 }
 
-function makeCtx() {
+function makeCtx(): ReturnType<typeof createExecutionContext> {
   return createExecutionContext()
 }
 
