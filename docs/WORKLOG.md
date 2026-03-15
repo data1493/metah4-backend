@@ -5,6 +5,14 @@ Track incidents, fixes, and the current known-good worker configuration so we ca
 
 ## Recent Problems And Fix Attempts
 
+8. libsodium-wrappers replaced with tweetnacl — worker now functional (March 15, 2026)
+- Symptom: All libsodium initialization patterns caused "Promise will never complete" in Workers runtime.
+- Root Cause: libsodium-wrappers uses WASM and requires awaiting `sodium.ready`; the Workers runtime rejects this promise entirely regardless of wrapping strategy.
+- Fix: Removed `libsodium-wrappers`, installed `tweetnacl` (pure JS NaCl `crypto_secretbox` — identical algorithm/wire format, no initialization required).
+- Implementation: Replaced all sodium calls with `nacl.secretbox.open()`. Base64 and hex decoding now use `atob()` and a simple loop (no libsodium helpers needed).
+- Deployed: Version `a15fa8bc-b516-4568-993d-b58b47c437bd` — confirmed working.
+- Added `[9c]` body preview log (first 300 chars of raw Brave response) to help diagnose content issues (e.g. unexpected emoji in results).
+
 1. Deploy command failed in wrong directory
 - Symptom: `npm run deploy` reported missing script.
 - Cause: command executed from outer workspace root instead of worker project path.

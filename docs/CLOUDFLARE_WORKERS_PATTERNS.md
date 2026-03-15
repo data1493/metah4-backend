@@ -86,9 +86,17 @@ export default {
    const plaintext = await crypto.subtle.decrypt(...)
    ```
 
-3. **tweetnacl-js** (Lighter alternative)
-   - Pure JS implementation of NaCl
-   - May work without WASM initialization issues
+3. **tweetnacl** ✅ CONFIRMED WORKING (March 15, 2026)
+   - Pure JS implementation of NaCl secretbox (same algorithm as libsodium)
+   - No initialization, no WASM — works immediately in Workers
+   - Drop-in compatible: same key/nonce sizes, same ciphertext format
+   ```typescript
+   import nacl from 'tweetnacl'
+
+   const plain = nacl.secretbox.open(ciphertext, nonce, secretKey)
+   // nacl.secretbox.keyLength  === 32
+   // nacl.secretbox.nonceLength === 24
+   ```
 
 ## Async I/O Restrictions
 

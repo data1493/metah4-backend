@@ -120,15 +120,13 @@ GET /search?q=<encrypted_base64_payload>
 
 ## Current Status
 
-**Version:** 27af7f0b-ec5c-4536-8ecb-cc00d21f06ab (BROKEN)  
-**Deployed:** March 11, 2026  
-**Status:** 🚨 BLOCKED - libsodium-wrappers incompatible with Cloudflare Workers  
-**URL:** https://metah4-backend.metah4-backend.workers.dev (non-functional)
+**Version:** a15fa8bc-b516-4568-993d-b58b47c437bd  
+**Deployed:** March 15, 2026  
+**Status:** ✅ Working  
+**URL:** https://metah4-backend.metah4-backend.workers.dev
 
-### Critical Issue
-libsodium-wrappers cannot initialize in Cloudflare Workers. ANY attempt to await `sodium.ready` (even with Promise.race timeout) triggers "Promise will never complete" error.
-
-**Architecture decision required:** Switch to compatible crypto library (see [CLOUDFLARE_WORKERS_PATTERNS.md](docs/CLOUDFLARE_WORKERS_PATTERNS.md) for alternatives).
+### Resolution
+Replaced `libsodium-wrappers` (WASM-based, incompatible with Workers runtime) with `tweetnacl` (pure JS NaCl). Same `crypto_secretbox` algorithm — no frontend changes required.
 
 See [RELEASE_BASELINE.md](docs/RELEASE_BASELINE.md) for freeze policy and rollback information.
 
@@ -138,7 +136,7 @@ If you're new to Cloudflare Workers, these were the hardest lessons learned:
 
 1. **You cannot `await` in global scope** - This includes `await sodium.ready`
 2. **libsodium-wrappers is incompatible** - ANY await of `sodium.ready` (even with Promise.race timeout) causes "Promise will never complete"
-3. **Use pure JS crypto libraries** - Avoid WASM-based libraries that require async initialization (@stablelib recommended)
+3. **Use `tweetnacl` instead** - Pure JS NaCl secretbox, identical algorithm, no initialization needed, confirmed working in Workers
 4. **Workers timeout at 10 seconds** - Use AbortController and Promise.race for all external calls
 5. **Secrets via CLI only** - Production secrets must be set with `wrangler secret put`, never in config files
 
@@ -146,4 +144,4 @@ Full details in [CLOUDFLARE_WORKERS_PATTERNS.md](docs/CLOUDFLARE_WORKERS_PATTERN
 
 ---
 
-Last Updated: March 11, 2026
+Last Updated: March 15, 2026

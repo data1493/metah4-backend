@@ -1,13 +1,30 @@
-import { default as sodium } from 'libsodium-wrappers'
+import nacl from 'tweetnacl'
 
-// CRITICAL: Store ready promise in global scope (not await here - that's disallowed)
-// Then await inside the handler. This is the correct pattern for Cloudflare Workers.
-const sodiumReady = sodium.ready
+// tweetnacl is pure JS — no WASM, no async initialization needed
 
 type WorkerEnv = Env & {
 	SHARED_SECRET?: string;
 	BRAVE_API_KEY?: string;
 };
+
+function fromHex(hex: string): Uint8Array {
+  if (hex.length % 2 !== 0) throw new Error('Invalid hex string length')
+  const arr = new Uint8Array(hex.length / 2)
+  for (let i = 0; i < arr.length; i++) {
+    arr[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16)
+  }
+  return arr
+}
+
+function fromBase64(b64: string): Uint8Array {
+  // Normalize URL-safe base64 to standard, then decode
+  const standard = b64.replace(/-/g, '+').replace(/_/g, '/')
+  const padded = standard + '='.repeat((4 - standard.length % 4) % 4)
+  const binary = atob(padded)
+  const arr = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i)
+  return arr
+}
 
 export default {
   async fetch(request: Request, env: WorkerEnv): Promise<Response> {
@@ -15,19 +32,6 @@ export default {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type'
-    }
-
-    // Try to ensure sodium is ready with aggressive timeout
-    // Workers environment may not properly resolve sodium.ready promise
-    try {
-      const timeout = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Sodium init timeout')), 100)
-      )
-      await Promise.race([sodiumReady, timeout])
-      console.log('[0] Sodium ready via await')
-    } catch (e) {
-      // If timeout or error, sodium might still be usable - we'll catch crypto errors later
-      console.log('[0] Sodium await bypassed:', e instanceof Error ? e.message : String(e))
     }
 
     if (request.method === 'OPTIONS') {
@@ -59,19 +63,22 @@ export default {
     }
 
     console.log('[3] Converting secret key...')
-    let secretKey
+    let secretKey: Uint8Array
     try {
-      secretKey = sodium.from_hex(env.SHARED_SECRET)
+      secretKey = fromHex(env.SHARED_SECRET)
       console.log('[3b] Secret key converted, length:', secretKey.length)
+      if (secretKey.length !== nacl.secretbox.keyLength) {
+        throw new Error(`Key must be ${nacl.secretbox.keyLength} bytes, got ${secretKey.length}`)
+      }
     } catch (e) {
       console.log('[3c] Secret key conversion failed:', e instanceof Error ? e.message : String(e))
       return new Response(JSON.stringify({ error: 'Invalid SHARED_SECRET format' }), { status: 500, headers: corsHeaders })
     }
 
     console.log('[4] Decoding base64...')
-    let combined
+    let combined: Uint8Array
     try {
-      combined = sodium.from_base64(q, sodium.base64_variants.ORIGINAL)
+      combined = fromBase64(q)
       console.log('[4b] Base64 decode success, length:', combined.length)
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
@@ -79,36 +86,40 @@ export default {
       return new Response(JSON.stringify({ error: 'Invalid base64 encoding' }), { status: 400, headers: corsHeaders })
     }
 
-    if (combined.length < sodium.crypto_secretbox_NONCEBYTES + 1) {
+    const NONCE_BYTES = nacl.secretbox.nonceLength // 24
+    if (combined.length < NONCE_BYTES + 1) {
       console.log('[4d] Payload too short for nonce + ciphertext:', combined.length)
       return new Response(JSON.stringify({ error: 'Payload too short' }), { status: 400, headers: corsHeaders })
     }
 
     console.log('[5] Extracting nonce and ciphertext...')
-    const nonce = combined.subarray(0, sodium.crypto_secretbox_NONCEBYTES)
-    const ciphertext = combined.subarray(sodium.crypto_secretbox_NONCEBYTES)
+    const nonce = combined.subarray(0, NONCE_BYTES)
+    const ciphertext = combined.subarray(NONCE_BYTES)
     console.log('[5b] Nonce length:', nonce.length, 'Ciphertext length:', ciphertext.length)
 
     console.log('[6] Decrypting...')
-    let plain
+    let plain: Uint8Array | null
     try {
-      plain = sodium.crypto_secretbox_open_easy(ciphertext, nonce, secretKey)
+      plain = nacl.secretbox.open(ciphertext, nonce, secretKey)
+      if (plain === null) {
+        console.log('[6c] Decrypt FAILED: authentication failed (wrong key or corrupted data)')
+        return new Response(JSON.stringify({ error: 'Decryption failed - wrong key or corrupted data' }), { status: 400, headers: corsHeaders })
+      }
       console.log('[6b] Decrypt success, plain length:', plain.length)
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
       console.log('[6c] Decrypt FAILED:', message)
-      return new Response(JSON.stringify({ error: 'Decryption failed - wrong key or corrupted data' }), { status: 400, headers: corsHeaders })
+      return new Response(JSON.stringify({ error: 'Decryption failed' }), { status: 400, headers: corsHeaders })
     }
 
     console.log('[7] Converting to string...')
-    let decrypted
+    let decrypted: string
     try {
-      decrypted = sodium.to_string(plain)
+      decrypted = new TextDecoder().decode(plain)
       console.log('[7b] String conversion success, query length:', decrypted.length)
-      console.log('[7c] 🔍 DECRYPTED QUERY:', decrypted)
-      console.log('[7d] First 50 chars:', decrypted.substring(0, 50))
+      console.log('[7c] DECRYPTED QUERY:', decrypted)
     } catch (e) {
-      console.log('[7e] to_string fail:', e instanceof Error ? e.message : String(e))
+      console.log('[7e] decode fail:', e instanceof Error ? e.message : String(e))
       return new Response(JSON.stringify({ error: 'String conversion failed' }), { status: 400, headers: corsHeaders })
     }
 
@@ -117,18 +128,17 @@ export default {
       return new Response(JSON.stringify({ error: 'Decrypted query is empty' }), { status: 400, headers: corsHeaders })
     }
 
-    console.log('[8] Preparing Brave API request...')
-    let braveRes
+    console.log('[8] Fetching Brave API...')
+    let braveRes: Response
     try {
       const decryptedQuery = decrypted.trim()
       const braveUrl = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(decryptedQuery)}&count=10`
-      console.log('[8b] Fetching Brave URL')
 
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 8000)
 
       braveRes = await fetch(braveUrl, {
-        headers: { 
+        headers: {
           'X-Subscription-Token': env.BRAVE_API_KEY || '',
           'Accept': 'application/json'
         },
@@ -136,22 +146,24 @@ export default {
       })
 
       clearTimeout(timeoutId)
-      console.log('[8c] Brave response status:', braveRes.status)
+      console.log('[8b] Brave response status:', braveRes.status)
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
-      console.log('[8d] Brave fetch fail:', message)
+      console.log('[8c] Brave fetch fail:', message)
       return new Response(JSON.stringify({ error: 'Brave API call failed or timed out' }), { status: 502, headers: corsHeaders })
     }
 
     console.log('[9] Reading response body...')
-    let braveBody
+    let braveBody: string
     try {
       const bodyPromise = braveRes.text()
-      const bodyTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Body Read Timeout')), 3000))
-      braveBody = await Promise.race([bodyPromise, bodyTimeout]) as string
-      console.log('[9b] Body read success, length:', braveBody.length)
+      const bodyTimeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Body Read Timeout')), 3000))
+      braveBody = await Promise.race([bodyPromise, bodyTimeout])
+      console.log('[9b] Body length:', braveBody.length)
+      // DIAGNOSTIC: log first 300 chars to spot moon emoji or unexpected content in raw Brave response
+      console.log('[9c] Body preview:', braveBody.substring(0, 300))
     } catch (e) {
-      console.log('[9c] Brave body read fail:', e instanceof Error ? e.message : String(e))
+      console.log('[9d] Brave body read fail:', e instanceof Error ? e.message : String(e))
       return new Response(JSON.stringify({ error: 'Failed to read response body' }), { status: 502, headers: corsHeaders })
     }
 

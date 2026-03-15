@@ -1,30 +1,17 @@
-# Release Baseline: NO STABLE VERSION (Current)
+# Release Baseline: v0.4-stable (Current)
 
-## Status: BLOCKED ON CRYPTO LIBRARY INCOMPATIBILITY
+## Status: ✅ WORKING
 
-Date: March 11, 2026
+Date: March 15, 2026
 
-**Critical Issue:** libsodium-wrappers is fundamentally incompatible with Cloudflare Workers runtime.
+**Fix:** Replaced `libsodium-wrappers` (WASM, incompatible with Workers runtime) with `tweetnacl` (pure JS NaCl, no initialization required). Same `crypto_secretbox` algorithm — fully compatible with the existing frontend encryption.
 
-## Failed Attempts Documented
+## Baseline Metadata
 
-- v27af7f0b (March 11, 2026): Promise.race with timeout → "Promise will never complete"
-- v948b9aa0 (March 11, 2026): Direct await in handler → "Promise will never complete"
-- v3e1cea32 (March 10, 2026): No initialization → "_malloc undefined"
-
-## Architecture Decision Needed
-
-Must choose alternative crypto library:
-
-1. **@stablelib/xchacha20poly1305** - Pure JS, same cipher as libsodium
-2. **Web Crypto API** - Built-in but requires different encryption scheme
-3. **tweetnacl-js** - Lighter NaCl implementation
-
-## Last Deployed (Non-Functional)
-
-- Cloudflare Worker Version: `27af7f0b-ec5c-4536-8ecb-cc00d21f06ab`
+- Cloudflare Worker Version: `a15fa8bc-b516-4568-993d-b58b47c437bd`
 - Worker URL: `https://metah4-backend.metah4-backend.workers.dev`
-- Issue: "Promise will never complete" on all requests
+- Crypto library: `tweetnacl` (pure JS, no WASM)
+- Status: ✅ Deployed and functional
 
 ## Required Secrets
 
@@ -45,14 +32,32 @@ curl -i --max-time 10 'https://metah4-backend.metah4-backend.workers.dev/search?
 ```
 Expected: JSON response proxied from Brave (status usually `200`) and no hang.
 
+## Diagnostic Logging
+
+All requests emit numbered logs visible via `npx wrangler tail`:
+- `[1]` Query received
+- `[3]` Secret key conversion
+- `[4]` Base64 decode
+- `[5]` Nonce/ciphertext split
+- `[6]` Decryption
+- `[7c]` Decrypted query string
+- `[8b]` Brave response status
+- `[9c]` Raw Brave body preview (first 300 chars)
+
 ## Freeze Policy
 
-- Treat `v0.3-stable` (version 27af7f0b) as current stable rollback point.
-- Reference `docs/CLOUDFLARE_WORKERS_PATTERNS.md` for implementation patterns
+- Treat `v0.4-stable` (version a15fa8bc) as current stable rollback point.
+- Reference `docs/CLOUDFLARE_WORKERS_PATTERNS.md` for implementation patterns.
 - Do not modify `src/index.ts` unless:
   - production behavior regresses, or
   - a security/privacy issue is identified, or
   - an external dependency/API change breaks behavior.
+
+## Failed Attempts (Historical)
+
+- v27af7f0b (March 11, 2026): libsodium Promise.race with timeout → "Promise will never complete"
+- v948b9aa0 (March 11, 2026): libsodium direct await in handler → "Promise will never complete"
+- v3e1cea32 (March 10, 2026): libsodium no initialization → "_malloc undefined"
 
 ---
 
