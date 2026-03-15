@@ -1,4 +1,6 @@
 {
+	"python.terminal.activateEnvironment": true,
+	"python.terminal.useEnvFile": true,
 	"files.associations": {
 		"wrangler.json": "jsonc"
 	}
