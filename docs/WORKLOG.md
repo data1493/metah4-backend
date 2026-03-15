@@ -1,11 +1,158 @@
 # Metah4 Backend Worklog
 
 ## Purpose
-Track incidents, fixes, and the current known-good worker configuration so we can avoid regressions.
+Track incidents, fixes, and the current known-good worker configuration so we can avoid regressions. Entries are in **chronological order** — oldest at top, newest at bottom.
 
-## Recent Problems And Fix Attempts
+---
 
-9. Local dev ERR_CONNECTION_REFUSED — resolved (March 15, 2026)
+## Entry 1 — Deploy command failed in wrong directory
+**Date:** Early March 2026
+
+- **Symptom:** `npm run deploy` reported missing script.
+- **Cause:** Command executed from the outer workspace root instead of the worker project path.
+- **Fix:** Run all npm scripts from the project root (`~/development/metah4-backend`).
+
+---
+
+## Entry 2 — Worker format/build errors
+**Date:** Early March 2026
+
+- **Symptom:** Wrangler build errors about service worker format and `node:perf_hooks` import behavior.
+- **Cause:** `addEventListener` style worker conflicted with ES module expectations.
+- **Fix:** Moved to ES Module worker entrypoint: `export default { async fetch(...) { ... } }`.
+
+---
+
+## Entry 3 — libsodium import failure
+**Date:** Early March 2026
+
+- **Symptom:** Build failed with "no matching export for named import `sodium`".
+- **Cause:** Incorrect import style.
+- **Fix:** Use default import: `import sodium from 'libsodium-wrappers'`.
+
+---
+
+## Entry 4 — Runtime hang on `/search`
+**Date:** Early March 2026
+
+- **Symptom:** Cloudflare cancelled requests as hung.
+- **Suspected causes:** sodium init blocking, bad encoded input, decryption edge cases, hanging upstream call.
+- **Fixes applied:**
+  - Lazy sodium init inside handler
+  - Bounded sodium init timeout (`Crypto init failed` on timeout)
+  - Strict base64 decode handling
+  - Encrypted payload length validation
+  - Decryption null/failure checks
+  - Brave upstream timeout + AbortController
+  - Explicit missing-secret checks for `SHARED_SECRET` and `BRAVE_API_KEY`
+
+---
+
+## Entry 5 — Privacy hardening
+**Date:** Early March 2026
+
+- **Symptom:** Debug output could leak decrypted plaintext query content to log streams.
+- **Fix:** Removed `console.log('Decrypted query:', decrypted)` after stabilization.
+
+---
+
+## Entry 6 — Query corruption from URL encoding
+**Date:** Early March 2026
+
+- **Symptom:** Malformed decrypted text after transport.
+- **Cause:** Base64 `+` characters replaced with spaces by URL decoding.
+- **Mitigation:** Frontend must send `encodeURIComponent(base64)` or use URL-safe base64.
+
+---
+
+## Entry 7 — Persistent runtime hangs despite guards
+**Date:** March 10, 2026
+
+- **Symptom:** Cloudflare "Worker's code had hung" error continued despite multiple timeout attempts.
+- **Investigation:** Added comprehensive numbered logging [1]–[9] throughout request pipeline:
+  - `[1]` Query received
+  - `[2]` Sodium init
+  - `[3]` Secret key conversion
+  - `[4]` Base64 decode
+  - `[5]` Nonce/ciphertext extraction
+  - `[6]` Decryption
+  - `[7]` String conversion
+  - `[8]` Brave fetch
+  - `[9]` Body read
+- **Root cause found:** Logs showed hang at `[2]`. `await sodium.ready` (even with `Promise.race` timeout) caused "Promise will never complete" in the Workers runtime.
+- **Attempts:**
+  - v3e1cea32: Removed `await sodium.ready` entirely → `"_malloc undefined"` (sodium not initialized)
+  - v948b9aa0: Direct `await sodium.ready` in handler → "Promise will never complete"
+  - v27af7f0b: `Promise.race([sodium.ready, timeout])` → still "Promise will never complete"
+- **Conclusion:** `libsodium-wrappers` (WASM-based) is fundamentally incompatible with Cloudflare Workers runtime. See CLOUDFLARE_WORKERS_PATTERNS.md for full analysis.
+
+---
+
+## Entry 8 — libsodium-wrappers replaced with tweetnacl — worker functional
+**Date:** March 15, 2026
+
+- **Problem:** All libsodium initialization patterns failed in Workers runtime.
+- **Root cause:** `libsodium-wrappers` requires WASM + `await sodium.ready`; Workers runtime rejects any await of that promise regardless of wrapping strategy.
+- **Fix:** Replaced `libsodium-wrappers` with `tweetnacl` (pure JS NaCl `crypto_secretbox` — identical algorithm and wire format, no initialization required).
+- **Implementation:** All sodium calls replaced with `nacl.secretbox.open()`. Base64 and hex decoding use `atob()` and a simple loop — no libsodium helpers needed.
+- **Deployed:** Version `a15fa8bc-b516-4568-993d-b58b47c437bd` — confirmed working.
+- **Also added:** `[9c]` body preview log (first 300 chars of raw Brave response) to diagnose unexpected content.
+
+---
+
+## Entry 9 — Local dev ERR_CONNECTION_REFUSED
+**Date:** March 15, 2026
+
+- **Symptom:** Frontend search threw `Network Error` / `ERR_CONNECTION_REFUSED` against `http://localhost:8787`.
+- **Root cause 1:** `wrangler dev` was not running. Vite proxy forwards `/api/chimp/search` → `http://localhost:8787` but nothing was listening there.
+- **Root cause 2:** No `.dev.vars` file existed — `SHARED_SECRET` and `BRAVE_API_KEY` would be missing.
+- **Root cause 3:** `wrangler.jsonc` had `compatibility_date = "2026-03-01"` — updated to `2025-01-01`.
+- **Fix:**
+  - Created `.dev.vars` with correct `SHARED_SECRET` and `BRAVE_API_KEY`
+  - Updated `compatibility_date` to `2025-01-01`
+  - Started `wrangler dev` from project root
+- **Confirmed working:**
+  - `GET /` → `{"error":"Missing q"}` (fast, no hang)
+  - `GET /search?q=test` → `{"error":"Payload too short"}` (correct rejection of unencrypted input)
+- **Notes:**
+  - `.dev.vars` is gitignored — never commit. Copy from `.dev.vars.example` after fresh clones.
+  - `wrangler tail` (for production logs) and `wrangler dev` (local) must run in separate terminals.
+
+---
+
+## Entry 10 — Project modernization overhaul
+**Date:** March 15, 2026
+
+- **Changes:**
+  - **Security:** Removed `[7c] DECRYPTED QUERY` log — plaintext user search queries must not appear in Cloudflare log streams.
+  - **Config cleanup:** Removed `jsx:react-jsx` from `tsconfig.json` (irrelevant for a Worker); stripped ~35 lines of commented boilerplate from `wrangler.jsonc`; bumped package version to 1.0.0.
+  - **ESLint:** Added `eslint.config.js` with `@typescript-eslint/recommended`. `no-console:warn` keeps diagnostic logs visible in lint output; `no-explicit-any:error`; `no-unused-vars:error`.
+  - **Tests:** Rewrote entire test suite (was "Hello World" scaffold — 0% coverage of real code). 10 tests covering CORS, method validation, query validation, crypto errors, happy path (real nacl encryption), and upstream error handling. All passing.
+  - **DX:** Added `.dev.vars.example`, `typecheck` script, `.vscode/extensions.json`.
+  - **CI/CD:** GitHub Actions workflows for lint+typecheck+test on PR, auto-deploy to Cloudflare on main push.
+  - **Docs:** README updated with scripts table, architecture fix, troubleshooting. WORKLOG reordered chronologically.
+- **Branch:** `overhaul/modernize-project` → merged to `main`.
+
+---
+
+## Quick Validation Checklist
+
+```bash
+npm run typecheck  # zero type errors
+npm run lint       # zero lint errors (console.log warns are expected)
+npm test           # 10 tests pass
+npm run dev        # http://localhost:8787 responds
+curl http://localhost:8787/                # → {"error":"Missing q"}
+curl 'http://localhost:8787/search?q=x'  # → {"error":"Payload too short"}
+```
+
+For production:
+```bash
+npx wrangler secret list   # confirm SHARED_SECRET and BRAVE_API_KEY set
+npm run deploy             # deploy to Cloudflare
+npx wrangler tail          # monitor live logs
+```
+
 - Symptom: Frontend search threw `Network Error` / `ERR_CONNECTION_REFUSED` hitting `http://localhost:8787`.
 - Root Cause 1: `wrangler dev` was not running. The Vite proxy forwards `/api/chimp/search` → `http://localhost:8787` but nothing was listening there.
 - Root Cause 2: No `.dev.vars` file existed, so `SHARED_SECRET` and `BRAVE_API_KEY` would have been missing for any local dev run.

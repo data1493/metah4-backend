@@ -1,0 +1,12 @@
+# Local development secrets — copy this file to .dev.vars and fill in real values.
+# .dev.vars is gitignored and must never be committed.
+#
+# SHARED_SECRET: 64-character hex string (32 bytes).
+#   Must be the same key the frontend uses to encrypt queries.
+#   Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+#
+# BRAVE_API_KEY: Brave Search API key.
+#   Obtain from https://brave.com/search/api/
+#
+SHARED_SECRET=<64-char-hex-key>
+BRAVE_API_KEY=<brave-search-api-key>

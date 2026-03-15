@@ -1,11 +1,14 @@
-# Release Baseline: v0.5-stable (Current)
+# Release Baseline: v1.0-stable (Current)
 
-## Status: ✅ WORKING — Local dev confirmed March 15, 2026
+## Status: ✅ WORKING — Confirmed March 15, 2026
 
-**Summary of this release:**
-- Local dev `ERR_CONNECTION_REFUSED` resolved (`.dev.vars` + `wrangler dev` required)
-- `compatibility_date` set to `2025-01-01` in both `wrangler.toml` and `wrangler.jsonc`
-- No changes to `src/index.ts` — crypto and routing code unchanged from v0.4-stable
+**Summary of this release (overhaul/modernize-project branch → main):**
+- Security: removed `[7c] DECRYPTED QUERY` log (plaintext queries must not appear in logs)
+- Config: removed `jsx` from tsconfig, stripped wrangler boilerplate, bumped to v1.0.0
+- ESLint: `eslint.config.js` with `@typescript-eslint/recommended`; typecheck script
+- Tests: full 10-test suite replacing "Hello World" scaffolding — 100% path coverage
+- DX: `.dev.vars.example`, `.vscode/extensions.json` recommendations
+- CI/CD: GitHub Actions for lint/test on PR, auto-deploy on main push
 
 ## Baseline Metadata
 
@@ -33,8 +36,8 @@ BRAVE_API_KEY=<your Brave Search API key>
 ## Local Dev Quick Start
 
 ```bash
-cd ~/development/metah4-backend/~/development/metah4-backend
-# Ensure .dev.vars exists with both secrets (see above)
+cd ~/development/metah4-backend
+cp .dev.vars.example .dev.vars   # fill in SHARED_SECRET and BRAVE_API_KEY
 npm run dev        # starts on http://localhost:8787
 ```
 

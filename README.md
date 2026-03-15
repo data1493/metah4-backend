@@ -6,7 +6,7 @@ Cloudflare Worker that provides an encrypted search proxy to Brave Search API.
 
 ```
 Frontend (Browser)
-    ↓ (encrypts query with libsodium)
+    ↓ (encrypts query with tweetnacl/NaCl secretbox)
    [encrypted base64 payload]
     ↓ GET /search?q=...
 Cloudflare Worker (this repo)
@@ -22,9 +22,27 @@ Frontend (Browser)
 
 ### Local Development
 ```bash
+# 1. Install dependencies
 npm install
-npm run dev  # Starts local worker
+
+# 2. Create secrets file from template
+cp .dev.vars.example .dev.vars
+# Edit .dev.vars and fill in SHARED_SECRET and BRAVE_API_KEY
+
+# 3. Start local worker (http://localhost:8787)
+npm run dev
 ```
+
+### Available Scripts
+| Script | Description |
+|---|---|
+| `npm run dev` | Start local worker at http://localhost:8787 |
+| `npm test` | Run test suite (10 tests) |
+| `npm run typecheck` | TypeScript type check (no emit) |
+| `npm run lint` | ESLint — errors fail, console.log warns |
+| `npm run lint:fix` | ESLint with auto-fix |
+| `npm run deploy` | Deploy to Cloudflare Workers |
+| `npm run cf-typegen` | Regenerate worker-configuration.d.ts |
 
 ### Deployment
 ```bash
@@ -63,13 +81,16 @@ This project encountered several runtime-specific issues unique to Cloudflare Wo
 
 ```
 src/
-  index.ts          # Main worker handler (ES Module format)
+  index.ts          # Main worker handler (ES Module)
+test/
+  index.spec.ts     # Test suite (10 tests, real nacl encryption)
+  env.d.ts          # cloudflare:test type augmentation
 docs/
   CLOUDFLARE_WORKERS_PATTERNS.md  # Best practices & gotchas
   RELEASE_BASELINE.md             # Stable version tracking
-  WORKLOG.md                      # Detailed incident history
-test/
-  index.spec.ts     # Tests
+  WORKLOG.md                      # Incident history
+.dev.vars.example   # Template for local secrets (copy → .dev.vars)
+eslint.config.js    # ESLint flat config
 wrangler.jsonc      # Cloudflare configuration
 ```
 
@@ -118,8 +139,8 @@ GET /search?q=<encrypted_base64_payload>
 ### Decryption fails
 1. Verify `SHARED_SECRET` is set: `npx wrangler secret list`
 2. Check frontend/backend use same key
-3. Verify base64 variant matches (ORIGINAL vs URLSAFE)
-4. Check logs for [7c] line showing actual decrypted value
+3. Verify base64 variant matches (standard vs URL-safe)
+4. Check `wrangler tail` logs — look for `[6c]` (decrypt failed) message
 
 ## Current Status
 
@@ -128,8 +149,7 @@ GET /search?q=<encrypted_base64_payload>
 **Status:** ✅ Working  
 **URL:** https://metah4-backend.metah4-backend.workers.dev
 
-### Resolution
-Replaced `libsodium-wrappers` (WASM-based, incompatible with Workers runtime) with `tweetnacl` (pure JS NaCl). Same `crypto_secretbox` algorithm — no frontend changes required.
+**Overhaul (March 15, 2026):** project modernized — privacy fix (removed plaintext log), ESLint, 10-test suite with real crypto, CI/CD, .dev.vars.example, cleaned config.
 
 See [RELEASE_BASELINE.md](docs/RELEASE_BASELINE.md) for freeze policy and rollback information.
 
