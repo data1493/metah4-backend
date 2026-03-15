@@ -53,10 +53,11 @@ npx wrangler tail
 
 This project encountered several runtime-specific issues unique to Cloudflare Workers. The patterns documented here represent hard-won lessons:
 
-1. **libsodium initialization** - Special pattern required to avoid hangs AND initialization errors
+1. **libsodium incompatibility** - `libsodium-wrappers` (WASM) is fundamentally broken in Workers runtime. ALL `sodium.ready` await patterns fail. **Solved**: replaced with `tweetnacl` (pure JS, identical NaCl secretbox algorithm, no initialization needed).
 2. **Async restrictions** - Global scope limitations that don't exist in Node.js
 3. **Timeout handling** - Workers have hard 10-second limit requiring defensive coding
 4. **Module format** - Must use ES Modules, Service Worker format doesn't work
+5. **Local dev secrets** - Wrangler reads `.dev.vars` (not `.env`) for local secrets. Must create this file manually after cloning — it is gitignored.
 
 ## Project Structure
 
@@ -74,11 +75,13 @@ wrangler.jsonc      # Cloudflare configuration
 
 ## Environment Variables
 
-### Local (.env)
+### Local (.dev.vars)
+Create `.dev.vars` in the project root (gitignored — never commit):
 ```bash
-SHARED_SECRET=your_32_byte_hex_key_here
+SHARED_SECRET=your_64_char_hex_key_here
 BRAVE_API_KEY=your_brave_api_key_here
 ```
+> Must use `.dev.vars`, not `.env` — wrangler dev only reads `.dev.vars`.
 
 ### Production (via wrangler)
 Secrets must be set via CLI (not committed to config):
@@ -96,7 +99,7 @@ GET /search?q=<encrypted_base64_payload>
 
 **Response:** JSON results from Brave Search API (proxied)
 
-**Encryption:** Frontend encrypts query with libsodium `crypto_secretbox_easy`, base64-encodes result
+**Encryption:** Frontend encrypts query using NaCl `crypto_secretbox` (tweetnacl on the backend), base64-encodes the nonce+ciphertext payload
 
 ## Troubleshooting
 

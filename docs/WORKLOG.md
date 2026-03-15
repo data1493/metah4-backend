@@ -5,6 +5,21 @@ Track incidents, fixes, and the current known-good worker configuration so we ca
 
 ## Recent Problems And Fix Attempts
 
+9. Local dev ERR_CONNECTION_REFUSED — resolved (March 15, 2026)
+- Symptom: Frontend search threw `Network Error` / `ERR_CONNECTION_REFUSED` hitting `http://localhost:8787`.
+- Root Cause 1: `wrangler dev` was not running. The Vite proxy forwards `/api/chimp/search` → `http://localhost:8787` but nothing was listening there.
+- Root Cause 2: No `.dev.vars` file existed, so `SHARED_SECRET` and `BRAVE_API_KEY` would have been missing for any local dev run.
+- Root Cause 3: `wrangler.toml` (outer stub) had `compatibility_date = "2024-01-01"` and `wrangler.jsonc` (inner project) had `2026-03-01`; both updated to `2025-01-01` to match stable Workers runtime.
+- Fix:
+  - Created `.dev.vars` in project root with correct `SHARED_SECRET` and `BRAVE_API_KEY`.
+  - Updated `compatibility_date` to `2025-01-01` in both wrangler configs.
+  - Started `wrangler dev` from `~/development/metah4-backend/~/development/metah4-backend`.
+- Confirmed working:
+  - `GET /` → `{"error":"Missing q"}` (fast, no hang)
+  - `GET /search?q=test` → `{"error":"Payload too short"}` (correct rejection of unencrypted input)
+- Note: `.dev.vars` is gitignored — never commit secrets. Re-create from `SHARED_SECRET` and real Brave API key after fresh clones.
+- Note: When running `wrangler tail` for production log monitoring, a *separate* terminal is needed for `wrangler dev` local instance.
+
 8. libsodium-wrappers replaced with tweetnacl — worker now functional (March 15, 2026)
 - Symptom: All libsodium initialization patterns caused "Promise will never complete" in Workers runtime.
 - Root Cause: libsodium-wrappers uses WASM and requires awaiting `sodium.ready`; the Workers runtime rejects this promise entirely regardless of wrapping strategy.

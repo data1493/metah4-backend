@@ -1,24 +1,50 @@
-# Release Baseline: v0.4-stable (Current)
+# Release Baseline: v0.5-stable (Current)
 
-## Status: ✅ WORKING
+## Status: ✅ WORKING — Local dev confirmed March 15, 2026
 
-Date: March 15, 2026
-
-**Fix:** Replaced `libsodium-wrappers` (WASM, incompatible with Workers runtime) with `tweetnacl` (pure JS NaCl, no initialization required). Same `crypto_secretbox` algorithm — fully compatible with the existing frontend encryption.
+**Summary of this release:**
+- Local dev `ERR_CONNECTION_REFUSED` resolved (`.dev.vars` + `wrangler dev` required)
+- `compatibility_date` set to `2025-01-01` in both `wrangler.toml` and `wrangler.jsonc`
+- No changes to `src/index.ts` — crypto and routing code unchanged from v0.4-stable
 
 ## Baseline Metadata
 
 - Cloudflare Worker Version: `a15fa8bc-b516-4568-993d-b58b47c437bd`
 - Worker URL: `https://metah4-backend.metah4-backend.workers.dev`
-- Crypto library: `tweetnacl` (pure JS, no WASM)
-- Status: ✅ Deployed and functional
+- Crypto library: `tweetnacl` (pure JS, no WASM, no initialization)
+- Status: ✅ Deployed (production) + ✅ Local dev working
 
 ## Required Secrets
 
-- `SHARED_SECRET` (32-byte hex key)
-- `BRAVE_API_KEY`
+### Production
+Set once via CLI; persists across deployments:
+```bash
+npx wrangler secret put SHARED_SECRET
+npx wrangler secret put BRAVE_API_KEY
+```
 
-## Smoke Tests
+### Local Development
+Create `.dev.vars` in project root (gitignored — never commit):
+```
+SHARED_SECRET=<64-char hex — same key the frontend uses>
+BRAVE_API_KEY=<your Brave Search API key>
+```
+
+## Local Dev Quick Start
+
+```bash
+cd ~/development/metah4-backend/~/development/metah4-backend
+# Ensure .dev.vars exists with both secrets (see above)
+npm run dev        # starts on http://localhost:8787
+```
+
+Smoke test locally:
+```bash
+curl -s http://localhost:8787/              # → {"error":"Missing q"}
+curl -s 'http://localhost:8787/search?q=x' # → {"error":"Payload too short"}
+```
+
+## Smoke Tests (Production)
 
 1. Liveness (must not hang):
 ```bash
@@ -46,12 +72,12 @@ All requests emit numbered logs visible via `npx wrangler tail`:
 
 ## Freeze Policy
 
-- Treat `v0.4-stable` (version a15fa8bc) as current stable rollback point.
+- Treat `v0.5-stable` as current stable rollback point.
 - Reference `docs/CLOUDFLARE_WORKERS_PATTERNS.md` for implementation patterns.
 - Do not modify `src/index.ts` unless:
   - production behavior regresses, or
   - a security/privacy issue is identified, or
-  - an external dependency/API change breaks behavior.
+  - an external dependency/API change forces it.
 
 ## Failed Attempts (Historical)
 
@@ -61,7 +87,7 @@ All requests emit numbered logs visible via `npx wrangler tail`:
 
 ---
 
-# Release Baseline: v0.2-stable (Superseded)
+# Release Baseline: v0.4-stable (Superseded)
 
 ## Baseline Metadata
 - Cloudflare Worker Version: `948b9aa0-3b6d-4014-9421-a67e80522c69`

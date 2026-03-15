@@ -176,10 +176,11 @@ addEventListener('fetch', (event) => {
 
 ## Environment Variables & Secrets
 
-### Local Development (.env)
-- `.env` file is used for local development only
-- Format: `VARIABLE_NAME=value`
+### Local Development (.dev.vars)
+- **Use `.dev.vars`**, NOT `.env` — wrangler dev reads `.dev.vars`, not `.env`
+- Format: `VARIABLE_NAME=value` (one per line, no quotes needed)
 - Loaded automatically by `wrangler dev`
+- **`.dev.vars` is gitignored** — never commit it; re-create after fresh clones
 
 ### Production Secrets
 - **Never commit secrets to wrangler.jsonc**
