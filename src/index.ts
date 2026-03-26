@@ -134,7 +134,8 @@ export default {
     let braveRes: Response
     try {
       const decryptedQuery = decrypted.trim()
-      const braveParams = new URLSearchParams({ q: decryptedQuery, count: '10' })
+      const finalQuery = city ? `${decryptedQuery} near ${city}` : decryptedQuery
+      const braveParams = new URLSearchParams({ q: finalQuery, count: '10' })
       if (country) braveParams.set('country', country)
       if (city) braveParams.set('city', city)
       const braveUrl = `https://api.search.brave.com/res/v1/web/search?${braveParams.toString()}`

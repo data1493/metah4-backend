@@ -200,7 +200,7 @@ describe('country param forwarding', () => {
     expect(capturedUrl).not.toContain('country=')
   })
 
-  it('forwards city param to Brave when present', async () => {
+  it('forwards city param to Brave and appends near [city] to query', async () => {
     let capturedUrl = ''
     vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
       capturedUrl = url
@@ -216,6 +216,7 @@ describe('country param forwarding', () => {
     expect(res.status).toBe(200)
     expect(capturedUrl).toContain('country=US')
     expect(capturedUrl).toContain('city=')
+    expect(capturedUrl).toContain('near+Seattle')
   })
 
   it('omits city param from Brave when not provided', async () => {
