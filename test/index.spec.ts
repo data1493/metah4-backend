@@ -161,6 +161,63 @@ describe('Happy path', () => {
   })
 })
 
+describe('country param forwarding', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('forwards country param to Brave when present', async () => {
+    let capturedUrl = ''
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+      capturedUrl = url
+      return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
+    }))
+
+    const payload = encryptQuery('local news')
+    const req = new Request(`http://worker/?q=${encodeURIComponent(payload)}&country=GB`)
+    const ctx = makeCtx()
+    const res = await worker.fetch(req, makeEnv(), ctx)
+    await waitOnExecutionContext(ctx)
+
+    expect(res.status).toBe(200)
+    expect(capturedUrl).toContain('country=GB')
+  })
+
+  it('omits country param from Brave when not provided', async () => {
+    let capturedUrl = ''
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+      capturedUrl = url
+      return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
+    }))
+
+    const payload = encryptQuery('global news')
+    const req = new Request(`http://worker/?q=${encodeURIComponent(payload)}`)
+    const ctx = makeCtx()
+    const res = await worker.fetch(req, makeEnv(), ctx)
+    await waitOnExecutionContext(ctx)
+
+    expect(res.status).toBe(200)
+    expect(capturedUrl).not.toContain('country=')
+  })
+
+  it('passes country value unchanged to Brave', async () => {
+    let capturedUrl = ''
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+      capturedUrl = url
+      return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
+    }))
+
+    const payload = encryptQuery('ramen')
+    const req = new Request(`http://worker/?q=${encodeURIComponent(payload)}&country=JP`)
+    const ctx = makeCtx()
+    const res = await worker.fetch(req, makeEnv(), ctx)
+    await waitOnExecutionContext(ctx)
+
+    expect(capturedUrl).toContain('country=JP')
+    expect(capturedUrl).not.toContain('country=GB')
+  })
+})
+
 describe('Upstream error handling', () => {
   afterEach(() => {
     vi.restoreAllMocks()
