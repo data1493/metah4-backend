@@ -127,11 +127,15 @@ export default {
       return new Response(JSON.stringify({ error: 'Decrypted query is empty' }), { status: 400, headers: corsHeaders })
     }
 
+    const country = url.searchParams.get('country')
+
     console.log('[8] Fetching Brave API...')
     let braveRes: Response
     try {
       const decryptedQuery = decrypted.trim()
-      const braveUrl = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(decryptedQuery)}&count=10`
+      const braveParams = new URLSearchParams({ q: decryptedQuery, count: '10' })
+      if (country) braveParams.set('country', country)
+      const braveUrl = `https://api.search.brave.com/res/v1/web/search?${braveParams.toString()}`
 
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 8000)
