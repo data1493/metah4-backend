@@ -128,6 +128,7 @@ export default {
     }
 
     const country = url.searchParams.get('country')
+    const city = url.searchParams.get('city')
 
     console.log('[8] Fetching Brave API...')
     let braveRes: Response
@@ -135,6 +136,7 @@ export default {
       const decryptedQuery = decrypted.trim()
       const braveParams = new URLSearchParams({ q: decryptedQuery, count: '10' })
       if (country) braveParams.set('country', country)
+      if (city) braveParams.set('city', city)
       const braveUrl = `https://api.search.brave.com/res/v1/web/search?${braveParams.toString()}`
 
       const controller = new AbortController()

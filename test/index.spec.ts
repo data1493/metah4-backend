@@ -200,6 +200,41 @@ describe('country param forwarding', () => {
     expect(capturedUrl).not.toContain('country=')
   })
 
+  it('forwards city param to Brave when present', async () => {
+    let capturedUrl = ''
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+      capturedUrl = url
+      return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
+    }))
+
+    const payload = encryptQuery('pizza')
+    const req = new Request(`http://worker/?q=${encodeURIComponent(payload)}&country=US&city=Seattle%2C%20WA`)
+    const ctx = makeCtx()
+    const res = await worker.fetch(req, makeEnv(), ctx)
+    await waitOnExecutionContext(ctx)
+
+    expect(res.status).toBe(200)
+    expect(capturedUrl).toContain('country=US')
+    expect(capturedUrl).toContain('city=')
+  })
+
+  it('omits city param from Brave when not provided', async () => {
+    let capturedUrl = ''
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+      capturedUrl = url
+      return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
+    }))
+
+    const payload = encryptQuery('pizza')
+    const req = new Request(`http://worker/?q=${encodeURIComponent(payload)}&country=US`)
+    const ctx = makeCtx()
+    const res = await worker.fetch(req, makeEnv(), ctx)
+    await waitOnExecutionContext(ctx)
+
+    expect(res.status).toBe(200)
+    expect(capturedUrl).not.toContain('city=')
+  })
+
   it('passes country value unchanged to Brave', async () => {
     let capturedUrl = ''
     vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
