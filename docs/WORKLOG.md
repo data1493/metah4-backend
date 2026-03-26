@@ -135,12 +135,25 @@ Track incidents, fixes, and the current known-good worker configuration so we ca
 
 ---
 
+## Entry 11 — Location-based search: country param forwarding
+**Date:** March 26, 2026
+
+- **Feature:** Location-based search results (Option 1 — Browser Geolocation).
+- **Backend change:** Worker now reads the optional `country` query param from the incoming request and appends it to the Brave Search API URL when present. If absent (user has location toggle off), Brave defaults to global results — no change in behavior.
+- **Implementation:** `src/index.ts` — `url.searchParams.get('country')` read after decryption; `URLSearchParams` used to build Brave URL cleanly; `country` appended only when truthy.
+- **Contract:** Frontend sends `GET /search?q=<encrypted>&country=<ISO-3166-1-alpha-2>` (country optional). Worker passes value through unchanged.
+- **Tests added:** 3 new tests in `test/index.spec.ts` — country forwarded when present, omitted when absent, value passed unchanged. Total test count: 13.
+- **Branch:** `feat/location-country-param` (not yet merged — awaiting frontend implementation).
+- **Status:** Backend complete. Frontend changes (toggle UI, geolocation handler, `timezoneToCountry` util) pending in `metah4` frontend repo.
+
+---
+
 ## Quick Validation Checklist
 
 ```bash
 npm run typecheck  # zero type errors
 npm run lint       # zero lint errors (console.log warns are expected)
-npm test           # 10 tests pass
+npm test           # 13 tests pass
 npm run dev        # http://localhost:8787 responds
 curl http://localhost:8787/                # → {"error":"Missing q"}
 curl 'http://localhost:8787/search?q=x'  # → {"error":"Payload too short"}
